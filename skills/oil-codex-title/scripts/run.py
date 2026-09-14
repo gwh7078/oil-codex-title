@@ -1,4 +1,4 @@
-"""定位所属插件，调用共享程序，避免 Skill 复制后台实现。"""
+"""定位所属插件，调用共享标题命名程序，避免 Skill 复制实现。"""
 from pathlib import Path
 import runpy
 import sys
