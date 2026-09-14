@@ -12,6 +12,19 @@ from title_trigger_policy import load_trigger_config, schedule_eligible_turn
 
 
 class TriggerPolicyTests(unittest.TestCase):
+    def test_default_first_turn_then_every_five_new_turns(self):
+        cfg = load_trigger_config({})
+        self.assertEqual(cfg, {"first_trigger_turns": 1, "trigger_interval_turns": 5})
+        state = {}
+        outcomes = []
+        for n in range(1, 12):
+            state, decision = schedule_eligible_turn(state, f"turn-{n}", cfg)
+            outcomes.append(decision["trigger"])
+        self.assertEqual(
+            outcomes,
+            [True, False, False, False, False, True, False, False, False, False, True],
+        )
+
     def test_first_then_interval(self):
         cfg = load_trigger_config({"first_trigger_turns": 2, "trigger_interval_turns": 3})
         state = {}
