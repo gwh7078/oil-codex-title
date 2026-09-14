@@ -5,4 +5,15 @@ import sys
 
 scripts = Path(__file__).resolve().parents[3] / "scripts"
 sys.path.insert(0, str(scripts))
-runpy.run_path(str(scripts / "oil_codex_title.py"), run_name="__main__")
+
+trigger_commands = {
+    "trigger-configure": "configure",
+    "trigger-status": "status",
+}
+if len(sys.argv) > 1 and sys.argv[1] in trigger_commands:
+    sys.argv[1] = trigger_commands[sys.argv[1]]
+    target = scripts / "oil_codex_title_trigger.py"
+else:
+    target = scripts / "oil_codex_title.py"
+
+runpy.run_path(str(target), run_name="__main__")
