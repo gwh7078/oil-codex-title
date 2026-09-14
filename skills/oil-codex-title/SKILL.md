@@ -1,6 +1,6 @@
 ---
 name: oil-codex-title
-description: 管理 oil-codex-title 插件的话题自动命名和可选闲置归档，检查后台 Hook、预览或修改话题标题、暂停恢复、保护标题或话题、配置定期归档。当用户要求管理 Codex 话题名称、预览闲置话题归档或配置本插件时使用；不用于文章标题、视频标题、文件重命名，也不在普通对话结束时由主 Agent 主动执行。
+description: 管理 oil-codex-title 插件的话题自动命名和可选闲置归档，检查后台 Hook、预览或修改话题标题、暂停恢复、保护标题或话题、配置自动命名触发轮次、配置定期归档。当用户要求管理 Codex 话题名称、调整自动命名频率、预览闲置话题归档或配置本插件时使用；不用于文章标题、视频标题、文件重命名，也不在普通对话结束时由主 Agent 主动执行。
 metadata:
   compatibility: Codex 本地插件专用；需要 Python 3.10+、已登录且支持当前话题存储的 Codex CLI。macOS 已实测；Windows 与 Linux 已通过自动化测试，桌面完整流程待实测；云端不支持后台入口。
 ---
@@ -21,8 +21,10 @@ Windows 下将示例的 `python3` 换成 `py -3`，需要已安装 Python Launch
 
 1. 执行 `python3 <入口> doctor`，检查 Python、Codex 路径和 App Server。
 2. 用户提供话题时，追加 `--thread <话题 ID>` 验证读取兼容性。
-3. 需要配置时，执行 `configure --model <模型 ID> --service-tier fast` 或 `--service-tier standard`；修正可执行文件使用 `configure --codex-bin <路径>`。模型和档位应来自用户选择或当前可用列表，不猜模型名。默认 Luna Fast，Spark 使用 standard。
-4. 安装及信任步骤见插件根目录的 `README.md`。只通过官方插件安装和 Hook 信任入口操作，不修改信任数据库，也不加绕过信任的参数。
+3. 需要配置模型时，执行 `configure --model <模型 ID> --service-tier fast` 或 `--service-tier standard`；修正可执行文件使用 `configure --codex-bin <路径>`。模型和档位应来自用户选择或当前可用列表，不猜模型名。默认 Luna Fast，Spark 使用 standard。
+4. 需要调整自动命名频率时，执行 `trigger-configure --first-trigger-turns <首次有效轮数> --trigger-interval-turns <后续间隔轮数>`。两项都必须是 1～1000 的整数；默认分别为 2 和 5。只被原命名逻辑判定为原本会进入模型评估的有效轮次才计数，`disabled`、`archived`、`locked`、`manual_title`、`unchanged` 等跳过状态不计数。同一 Stop Hook 重复触发不重复计数。
+5. 执行 `trigger-status` 可查看当前两项触发配置和已记录的 thread 计数数量。设置为 `1 / 1` 时，自动触发频率接近原版。
+6. 安装及信任步骤见插件根目录的 `README.md`。只通过官方插件安装和 Hook 信任入口操作，不修改信任数据库，也不加绕过信任的参数。
 
 Hook 安装、启用、信任和实际成功运行是不同状态。`doctor` 成功不能证明 Hook 已自动触发。
 
@@ -31,13 +33,16 @@ Hook 安装、启用、信任和实际成功运行是不同状态。`doctor` 成
 1. 执行 `python3 <入口> rename <话题 ID>`，由独立模型生成预览。
 2. 用户已经要求改名时，直接执行同一命令并追加 `--apply`；预览请求停在候选结果。
 3. 读取命令结果；`renamed` 表示标题元数据已写入且读回核验，`kept` 或 `unchanged` 表示保留。它不证明桌面缓存已刷新。
-4. 返回实际标题和状态，不把候选当作已经生效的标题。
+4. 手动 `rename` / `--apply` 不受自动触发轮次限制，用户明确请求时立即执行。
+5. 返回实际标题和状态，不把候选当作已经生效的标题。
 
 `locked` 或 `manual_title` 表示标题受保护。只有用户要求恢复自动命名或覆盖手动标题时，才执行 `unlock <话题 ID>` 后重试。
 
-`stale_result` 或 `outdated_event` 表示对话已更新，本次候选已丢弃。用户要立即更新时可重新执行，自动入口等待后续轮次。
+`stale_result` 或 `outdated_event` 表示对话已更新，本次候选已丢弃。用户要立即更新时可重新执行，自动入口等待后续有效轮次。
 
 `ambiguous_title` 表示候选仍与已记录任务重名，本次保留原名。可以请用户补充具体对象，再重试。
+
+`throttled` 表示当前轮次原本可以进入模型评估，但尚未达到配置的首次或后续触发阈值。这是正常节流，不是故障。`throttled_duplicate` 表示同一 Stop Hook 已计数过，本次不会再次增加计数。
 
 如果用户反馈置顶列表仍显示旧标题，先读回真实标题，再使用宿主提供的 `set_thread_title` 同步该标题并核对列表；这属于用户明确请求的显示修复。后台 Hook 没有经过验证的桌面刷新通道，不得宣称它能自动刷新所有置顶缓存，不得直接修改桌面私有状态文件。
 
@@ -47,7 +52,8 @@ Hook 安装、启用、信任和实际成功运行是不同状态。`doctor` 成
 - `resume`：恢复后续轮次的自动命名。
 - `lock <话题 ID>`：固定该话题当前标题。
 - `unlock <话题 ID>`：重新允许该话题自动命名。
-- `status`：显示配置位置、启用状态和已记录话题数量。
+- `status`：显示原命名配置位置、启用状态和已记录话题数量。
+- `trigger-status`：显示自动触发轮次配置和计数记录数量。
 
 第一次接触话题时，插件无法判断现有标题是否来自用户手动设置。对需永久保留的历史标题使用 `lock`。
 
@@ -63,4 +69,4 @@ Hook 安装、启用、信任和实际成功运行是不同状态。`doctor` 成
 
 命令失败时保留原标题，先处理 `doctor` 报告的兼容性或登录问题，再重试。不要恢复原话题来发送改名指令，不直接修改数据库或对话文件，不让主 Agent 接管后台命名循环。
 
-后台日志仅记录状态、标题和用量，不保留完整对话。日志与配置位于 `status` 返回的数据目录；诊断时只读取相关话题的记录。
+后台日志仅记录状态、标题和用量，不保留完整对话。命名状态仍位于原 thread JSON；新增的触发计数使用数据目录下 `trigger-counters/<thread_id>.json` 的轻量本地 JSON，按话题独立保存，不需要数据库。
