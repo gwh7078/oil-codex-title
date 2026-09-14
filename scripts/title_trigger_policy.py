@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DEFAULT_TRIGGER_CONFIG = {
-    "first_trigger_turns": 2,
+    "first_trigger_turns": 1,
     "trigger_interval_turns": 5,
 }
 
