@@ -22,9 +22,10 @@ Windows 下将示例的 `python3` 换成 `py -3`，需要已安装 Python Launch
 1. 执行 `python3 <入口> doctor`，检查 Python、Codex 路径和 App Server。
 2. 用户提供话题时，追加 `--thread <话题 ID>` 验证读取兼容性。
 3. 需要配置模型时，执行 `configure --model <模型 ID> --service-tier fast` 或 `--service-tier standard`；修正可执行文件使用 `configure --codex-bin <路径>`。模型和档位应来自用户选择或当前可用列表，不猜模型名。默认 Luna Fast，Spark 使用 standard。
-4. 需要调整自动命名频率时，执行 `trigger-configure --first-trigger-turns <首次有效轮数> --trigger-interval-turns <后续间隔轮数>`。两项都必须是 1～1000 的整数；默认分别为 2 和 5。只被原命名逻辑判定为原本会进入模型评估的有效轮次才计数，`disabled`、`archived`、`locked`、`manual_title`、`unchanged` 等跳过状态不计数。同一 Stop Hook 重复触发不重复计数。
-5. 执行 `trigger-status` 可查看当前两项触发配置和已记录的 thread 计数数量。设置为 `1 / 1` 时，自动触发频率接近原版。
-6. 安装及信任步骤见插件根目录的 `README.md`。只通过官方插件安装和 Hook 信任入口操作，不修改信任数据库，也不加绕过信任的参数。
+4. 需要调整自动命名频率时，执行 `trigger-configure --first-trigger-turns <首次有效轮数> --trigger-interval-turns <后续间隔轮数>`。两项都必须是 1～1000 的整数；默认分别为 1 和 5。只被原命名逻辑判定为原本会进入模型评估的有效轮次才计数，`disabled`、`archived`、`locked`、`manual_title`、`unchanged` 等跳过状态不计数。同一 Stop Hook 重复触发不重复计数。默认触发序列是第 1、6、11、16……个有效轮次。
+5. 每次真正触发命名模型时，继续使用原插件的上下文构造：默认携带最近 5 个有效轮次，并单独保留首轮 `original_goal`；不是只提交当前触发轮次。
+6. 执行 `trigger-status` 可查看当前两项触发配置和已记录的 thread 计数数量。设置为 `1 / 1` 时，自动触发频率接近原版。
+7. 安装及信任步骤见插件根目录的 `README.md`。只通过官方插件安装和 Hook 信任入口操作，不修改信任数据库，也不加绕过信任的参数。
 
 Hook 安装、启用、信任和实际成功运行是不同状态。`doctor` 成功不能证明 Hook 已自动触发。
 
