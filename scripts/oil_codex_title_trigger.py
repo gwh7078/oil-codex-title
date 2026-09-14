@@ -47,26 +47,38 @@ def configure_trigger(root: Path, *, first=None, interval=None):
 
 
 def make_throttled_generator(binary, root, config, backend, thread_id, turn_id, trigger_config):
-    """Create a generator invoked only after the original core skip checks pass."""
+    """Create a generator invoked only after the original core skip checks pass.
+
+    A single process_thread call may invoke the generator more than once when
+    the first candidate conflicts with another title. Schedule/count the turn
+    only once per closure, while still allowing those same-turn model retries.
+    A later duplicate Stop Hook creates a new closure and is rejected from the
+    persisted last_counted_turn_id.
+    """
     counter_path = trigger_state_path(root, thread_id)
+    scheduled_for_turn = None
+    decision_for_turn = None
 
     def generate(context):
-        counter = read_json(counter_path)
-        core_state = read_json(state_path(root, thread_id))
-        scheduled, decision = schedule_eligible_turn(
-            counter,
-            turn_id,
-            trigger_config,
-            legacy_already_triggered=bool(
-                core_state.get("last_fingerprint") or core_state.get("last_generated_title")
-            ),
-        )
-        if decision["duplicate"]:
-            raise ModelSkipped("throttled_duplicate")
-        if not decision["trigger"]:
-            scheduled["updated_at"] = int(time.time())
-            atomic_json(counter_path, scheduled)
-            raise ModelSkipped("throttled")
+        nonlocal scheduled_for_turn, decision_for_turn
+
+        if scheduled_for_turn is None:
+            counter = read_json(counter_path)
+            core_state = read_json(state_path(root, thread_id))
+            scheduled_for_turn, decision_for_turn = schedule_eligible_turn(
+                counter,
+                turn_id,
+                trigger_config,
+                legacy_already_triggered=bool(
+                    core_state.get("last_fingerprint") or core_state.get("last_generated_title")
+                ),
+            )
+            if decision_for_turn["duplicate"]:
+                raise ModelSkipped("throttled_duplicate")
+            if not decision_for_turn["trigger"]:
+                scheduled_for_turn["updated_at"] = int(time.time())
+                atomic_json(counter_path, scheduled_for_turn)
+                raise ModelSkipped("throttled")
 
         # Dynamic skips while waiting for a worker slot (pause/archive/lock)
         # do not consume this trigger because the counter is persisted only
@@ -78,8 +90,8 @@ def make_throttled_generator(binary, root, config, backend, thread_id, turn_id, 
             context,
             before_model=lambda: ensure_title_active(backend, thread_id, root),
         )
-        scheduled["updated_at"] = int(time.time())
-        atomic_json(counter_path, scheduled)
+        scheduled_for_turn["updated_at"] = int(time.time())
+        atomic_json(counter_path, scheduled_for_turn)
         return candidate, usage
 
     return generate
