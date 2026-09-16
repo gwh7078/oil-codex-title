@@ -1,18 +1,18 @@
 {
   "name": "oil-codex-title",
-  "version": "0.1.0+codex.20260914060545",
-  "description": "用独立模型按可配置轮次维护稳定、具体的 Codex 话题标题。",
+  "version": "0.2.0+codex.20260916090300",
+  "description": "按可配置轮次维护 Codex 话题标题，并自动归档连续 7 天无新对话的话题。",
   "author": {
     "name": "oil"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "oil-codex-title",
-    "shortDescription": "让 Codex 话题标题稳定跟上当前任务",
-    "longDescription": "Stop Hook 每轮结束后做本地状态检查；默认首轮调用独立模型建立标题，之后每 5 个新的有效轮次再次评估。标题优先使用模块/对象｜当前具体任务，工作区已经提供项目名时不机械重复。保护手动标题，避免测试、提交、继续等步骤频繁改名。仅支持本地 Codex，需单独信任 Stop Hook。",
+    "shortDescription": "自动命名，并整理 7 天未活跃话题",
+    "longDescription": "Stop Hook 每轮结束后做本地状态检查；标题默认首轮调用独立模型建立，之后每 5 个新的有效轮次再次评估。归档不调用模型，只按最后一个已完成对话轮次的时间判断；连续 7 天无新对话后，通过 Codex 官方 App Server 接口归档。归档扫描最多每 6 小时一次，并在实际归档前重新读取话题，避免把刚刚重新活跃的话题归档。仅支持本地 Codex，需单独信任 Stop Hook。",
     "developerName": "oil",
     "category": "Productivity",
     "capabilities": [],
-    "defaultPrompt": "检查 oil-codex-title 的配置、触发轮次和 Hook 状态。"
+    "defaultPrompt": "检查 oil-codex-title 的标题触发配置、7 天自动归档和 Hook 状态。"
   }
 }
