@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Throttle the existing oil-codex-title Stop hook without changing its skip rules."""
+"""Throttle title updates and opportunistically archive long-inactive Codex threads."""
 from __future__ import annotations
 
 import argparse
@@ -10,6 +10,12 @@ import sys
 import time
 
 from codex_adapter import BackendError, ModelSkipped, CodexBackend, find_codex
+from inactive_archive import (
+    SCAN_INTERVAL_SECONDS,
+    archive_config,
+    archive_inactive_threads,
+    state_path as archive_state_path,
+)
 from oil_codex_title import (
     atomic_json,
     audit,
@@ -98,7 +104,7 @@ def make_throttled_generator(binary, root, config, backend, thread_id, turn_id, 
 
 
 def run_hook(root, config, event):
-    if os.environ.get("OIL_CODEX_TITLE_WORKER") == "1" or not config["enabled"]:
+    if os.environ.get("OIL_CODEX_TITLE_WORKER") == "1":
         return {"status": "disabled"}
     if event.get("hook_event_name") != "Stop" or event.get("stop_hook_active"):
         return {"status": "ignored_event"}
@@ -108,19 +114,39 @@ def run_hook(root, config, event):
     binary = find_codex(config["codex_bin"])
     trigger_config = configured_trigger(root)
     with CodexBackend(binary) as backend:
-        result = process_thread(
+        if config["enabled"]:
+            result = process_thread(
+                backend,
+                make_throttled_generator(
+                    binary, root, config, backend, thread_id, turn_id, trigger_config
+                ),
+                thread_id,
+                root,
+                config,
+                apply=True,
+                event_turn=turn_id,
+            )
+        else:
+            result = {"status": "disabled"}
+
+        # 归档和标题命名互相独立。每个 Stop Hook 都会检查是否到了扫描时间，
+        # 但真正扫描最多每 6 小时一次，且永远跳过当前正在使用的话题。
+        archive_result = archive_inactive_threads(
             backend,
-            make_throttled_generator(
-                binary, root, config, backend, thread_id, turn_id, trigger_config
-            ),
-            thread_id,
             root,
-            config,
-            apply=True,
-            event_turn=turn_id,
+            current_thread_id=thread_id,
         )
+
     if result["status"] not in ("renamed", "kept"):
         audit(root, thread_id, result)
+    if archive_result["status"] == "scanned" and (
+        archive_result["archived"] or archive_result["counts"].get("errors")
+    ):
+        audit(root, thread_id, {
+            "status": "auto_archive",
+            "archived_count": len(archive_result["archived"]),
+            "errors": archive_result["counts"].get("errors", 0),
+        })
     return result
 
 
@@ -136,6 +162,7 @@ def main():
     p.add_argument("--first-trigger-turns", type=int)
     p.add_argument("--trigger-interval-turns", type=int)
     sub.add_parser("status")
+    sub.add_parser("archive-scan", help="立即执行一次 7 天闲置归档扫描")
     args = parser.parse_args()
 
     root = data_dir()
@@ -154,7 +181,24 @@ def main():
             print(json.dumps({
                 "trigger": configured_trigger(root),
                 "tracked_counters": len(list((root / "trigger-counters").glob("*.json"))),
+                "auto_archive": {
+                    **archive_config(root),
+                    "scan_interval_seconds": SCAN_INTERVAL_SECONDS,
+                    "state": read_json(archive_state_path(root)),
+                },
             }, ensure_ascii=False))
+            return 0
+        if args.command == "archive-scan":
+            config = load_config(root)
+            binary = find_codex(config["codex_bin"])
+            with CodexBackend(binary) as backend:
+                result = archive_inactive_threads(
+                    backend,
+                    root,
+                    current_thread_id=os.environ.get("CODEX_THREAD_ID"),
+                    force=True,
+                )
+            print(json.dumps(result, ensure_ascii=False))
             return 0
 
         config = load_config(root)
