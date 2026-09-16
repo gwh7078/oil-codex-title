@@ -4,7 +4,7 @@
   <img src="./assets/readme/hero.svg" width="840" alt="Codex 话题实时命名，更好区分。">
 </p>
 
-让 Codex 的话题标题跟上你正在做的事情。Stop Hook 每轮结束后都会运行，但只有达到配置的有效轮次时才调用命名模型；被原有逻辑跳过的轮次不计数。
+让 Codex 的话题标题跟上你正在做的事情，并自动整理长期不再活跃的话题。Stop Hook 每轮结束后都会运行，但标题模型只有达到配置的有效轮次才调用；闲置归档完全不调用模型。
 
 ## 命名规则
 
@@ -64,23 +64,51 @@ python3 scripts/oil_codex_title_trigger.py configure \
   --trigger-interval-turns 5
 ```
 
-查看触发配置：
+## 7 天自动归档
+
+默认开启。规则只有一条：**最后一个已完成对话轮次距当前时间达到 7 天，就归档该话题。**
+
+- 最后活跃时间取最后一个已完成轮次的 `completedAt`，缺失时使用 `startedAt`。
+- 标题变更或其他元数据变化不会重置 7 天计时。
+- 只要出现新的对话轮次，最后活跃时间自然更新，重新从 0 开始计算。
+- 当前正在使用的话题不会归档。
+- 子 Agent、临时话题以及非空闲状态的话题不会自动归档。
+- 实际归档前会立即二次读取；如果扫描期间出现了新轮次，本次归档取消。
+- 已归档话题不会再次出现在未归档扫描列表里。
+- 不使用大模型判断“任务是否完成”“有没有待办”，也没有数据库或复杂状态机。
+
+为了避免每轮都遍历全部历史话题，Stop Hook 最多每 **6 小时**执行一次归档扫描。它不是独立的系统定时器：如果 Codex 连续多天完全没有运行，归档会在下一次产生 Stop Hook 时补做。
+
+立即手动扫描一次：
+
+```bash
+python3 scripts/oil_codex_title_trigger.py archive-scan
+```
+
+查看标题触发和归档状态：
 
 ```bash
 python3 scripts/oil_codex_title_trigger.py status
 ```
 
-计数使用每个 thread 独立的轻量 JSON，不需要数据库。
+当前默认归档配置等价于：
+
+```json
+{
+  "auto_archive_enabled": true,
+  "auto_archive_days": 7
+}
+```
 
 ## 安装
 
 复制下面这段话发给 Codex：
 
 ```text
-帮我查找 GitHub 仓库 gwh7078/oil-codex-title，下载并安装完整插件，开启话题自动命名并检查 Stop Hook 是否生效。需要我在界面中确认 Hook 信任时，请告诉我具体操作。
+帮我查找 GitHub 仓库 gwh7078/oil-codex-title 的 feature/configurable-title-trigger 分支，下载并安装完整插件。开启话题自动命名，并启用“连续 7 天无新对话自动归档”。安装后执行 doctor、trigger-status，并做一次 archive-scan 验证；不要恢复旧的模型归档判断逻辑。需要我在界面中确认 Hook 信任时，请告诉我具体操作。
 ```
 
-默认使用 Luna Fast，只有达到配置的有效轮次阈值时才调用模型，消耗当前 Codex 账号的模型额度。
+默认使用 Luna Fast，只有达到配置的有效轮次阈值时才调用命名模型；7 天归档本身不消耗模型额度。
 
 ## 日常操作
 
@@ -91,9 +119,9 @@ python3 scripts/oil_codex_title_trigger.py status
 - “恢复这个话题的自动命名。”
 - “暂停自动命名。” / “恢复自动命名。”
 - “把首次触发设为 1 轮，后续每 5 轮检查一次。”
+- “现在执行一次闲置归档扫描。”
+- “检查自动归档最近一次扫描状态。”
 
-插件只负责标题命名，不提供自动归档功能。Codex/ChatGPT 的归档使用宿主原生能力。
-
-目前为**预览版**。macOS 已实测；Windows 与 Linux 已通过自动化测试，桌面完整流程仍待实测；云端暂不支持。部分桌面版本的置顶列表可能仍显示旧标题，可让 Codex 检查真实标题并同步桌面显示。
+目前为**预览版**。macOS 已实测标题链路；Windows 与 Linux 已通过原有自动化测试，新增归档仍应在实际桌面环境做一次 Hook/归档验收。部分桌面版本的置顶列表可能仍显示旧标题，可让 Codex 检查真实标题并同步桌面显示。
 
 [详细使用与数据说明](docs/使用与边界.md) · [命名与回归规范](docs/命名与回归规范.md) · [兼容性与验证记录](docs/发布验收.md) · [MIT 许可证](LICENSE)
