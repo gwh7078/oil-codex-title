@@ -48,10 +48,10 @@ class FakeBackend:
 
 
 class InactiveArchiveTests(unittest.TestCase):
-    def test_archives_only_top_level_noncurrent_threads_inactive_over_seven_days(self):
+    def test_archives_top_level_noncurrent_threads_inactive_for_seven_days_or_more(self):
         now = 1_800_000_000
         backend = FakeBackend({
-            OLD_ID: thread(OLD_ID, now - 7 * DAY - 1),
+            OLD_ID: thread(OLD_ID, now - 7 * DAY),
             RECENT_ID: thread(RECENT_ID, now - 7 * DAY + 1),
             CURRENT_ID: thread(CURRENT_ID, now - 30 * DAY),
             SUBAGENT_ID: thread(SUBAGENT_ID, now - 30 * DAY, parentThreadId=OLD_ID),
