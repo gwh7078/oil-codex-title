@@ -1,5 +1,5 @@
 {
-  "description": "在后台按可配置轮次检查 Codex 话题标题，只更新标题元数据。",
+  "description": "在后台按可配置轮次维护 Codex 话题标题，并低频归档连续 7 天无新对话的话题。",
   "hooks": {
     "Stop": [
       {
